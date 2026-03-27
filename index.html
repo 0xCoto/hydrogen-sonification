@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hydrogen Line Sonification</title>
+<style>
+*,*::before,*::after{box-sizing:border-box}
+:root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--accent-hover:#79c0ff;--success:#3fb950;--warn:#d29922;--danger:#f85149;--radius:8px}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;min-height:100vh}
+a{color:var(--accent)}
+.skip-link{position:absolute;top:-100%;left:8px;background:var(--accent);color:#000;padding:8px 16px;border-radius:var(--radius);font-weight:600;z-index:100;text-decoration:none}
+.skip-link:focus{top:8px}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:16px 24px;text-align:center}
+header h1{margin:0;font-size:1.5rem;font-weight:600}
+header p{margin:4px 0 0;color:var(--muted);font-size:0.95rem}
+main{max-width:720px;margin:0 auto;padding:24px 16px 80px}
+section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px}
+section h2{margin:0 0 12px;font-size:1.1rem;font-weight:600}
+label{display:block;font-weight:500;margin-bottom:6px}
+input[type=file]{display:block;width:100%;padding:12px;background:var(--bg);border:2px dashed var(--border);border-radius:var(--radius);color:var(--text);font-size:1rem;cursor:pointer}
+input[type=file]:focus{outline:2px solid var(--accent);outline-offset:2px;border-color:var(--accent)}
+input[type=file]:hover{border-color:var(--accent)}
+.columns{display:flex;gap:16px;margin-top:12px;flex-wrap:wrap}
+.columns .field{flex:1;min-width:120px}
+.columns input[type=number]{width:100%;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:1rem}
+.columns input[type=number]:focus{outline:2px solid var(--accent);outline-offset:2px}
+fieldset{border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin:0}
+legend{font-weight:600;padding:0 8px;font-size:0.95rem}
+.radio-group{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
+.radio-group label{display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer;padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);transition:border-color .15s,background .15s}
+.radio-group label:hover{border-color:var(--accent)}
+.radio-group input[type=radio]{accent-color:var(--accent);width:18px;height:18px}
+.radio-group input[type=radio]:focus{outline:2px solid var(--accent);outline-offset:2px}
+.radio-group input[type=radio]:checked+span{color:var(--accent);font-weight:500}
+.controls{display:flex;gap:10px;flex-wrap:wrap}
+button{padding:10px 20px;border:none;border-radius:var(--radius);font-size:1rem;font-weight:600;cursor:pointer;transition:background .15s,opacity .15s}
+button:focus{outline:2px solid var(--accent);outline-offset:2px}
+button:disabled{opacity:.4;cursor:not-allowed}
+.btn-play{background:var(--success);color:#000}
+.btn-play:hover:not(:disabled){background:#46d05a}
+.btn-stop{background:var(--danger);color:#fff}
+.btn-stop:hover:not(:disabled){background:#ff6a61}
+.btn-download{background:var(--accent);color:#000}
+.btn-download:hover:not(:disabled){background:var(--accent-hover)}
+#status{padding:14px;border-radius:var(--radius);margin-top:16px;font-size:0.95rem;min-height:48px;background:var(--surface);border:1px solid var(--border)}
+#status:empty{display:none}
+#status.error{border-color:var(--danger);color:var(--danger)}
+#status.success{border-color:var(--success);color:var(--success)}
+#status.info{border-color:var(--accent);color:var(--accent)}
+.progress-bar{width:100%;height:6px;background:var(--bg);border-radius:3px;margin-top:8px;overflow:hidden;display:none}
+.progress-bar.active{display:block}
+.progress-bar-fill{height:100%;background:var(--accent);border-radius:3px;transition:width .1s;width:0%}
+.info-box{font-size:0.85rem;color:var(--muted);margin-top:12px;padding:12px;background:var(--bg);border-radius:var(--radius)}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.data-summary{margin-top:12px;padding:12px;background:var(--bg);border-radius:var(--radius);font-size:0.9rem;display:none}
+.data-summary.visible{display:block}
+.data-summary dt{font-weight:600;color:var(--accent);float:left;clear:left;width:180px}
+.data-summary dd{margin-left:190px;margin-bottom:4px;color:var(--text)}
+footer{text-align:center;padding:16px;color:var(--muted);font-size:0.8rem;border-top:1px solid var(--border)}
+@media(max-width:480px){.columns{flex-direction:column}.radio-group{flex-direction:column}.controls{flex-direction:column}.controls button{width:100%}}
+</style>
+</head>
+<body>
+<a href="#main" class="skip-link">Skip to main content</a>
+<header>
+<h1>21 cm Hydrogen Line Sonification</h1>
+<p>Upload a radio spectrum CSV to hear the hydrogen signal</p>
+</header>
+<main id="main" tabindex="-1">
+
+<section aria-labelledby="upload-heading">
+<h2 id="upload-heading">1. Upload spectrum data</h2>
+<label for="csvFile">Choose a CSV file from your radio telescope:</label>
+<input type="file" id="csvFile" accept=".csv,.txt,.dat,.tsv">
+<div class="columns">
+<div class="field">
+<label for="freqCol">Frequency column (1-based):</label>
+<input type="number" id="freqCol" value="1" min="1" max="100" aria-describedby="col-help">
+</div>
+<div class="field">
+<label for="powerCol">Power column (1-based):</label>
+<input type="number" id="powerCol" value="4" min="1" max="100" aria-describedby="col-help">
+</div>
+</div>
+<p class="info-box" id="col-help">
+Default: column 1 for frequency (MHz), column 4 for power. Adjust if your CSV uses different columns. Header rows are auto-detected and skipped.
+</p>
+<dl class="data-summary" id="dataSummary" aria-live="polite">
+<dt>Rows loaded:</dt><dd id="sumRows">-</dd>
+<dt>Frequency range:</dt><dd id="sumFreqRange">-</dd>
+<dt>Reference (1420.406 MHz):</dt><dd id="sumRefStatus">-</dd>
+</dl>
+</section>
+
+<section aria-labelledby="mode-heading">
+<h2 id="mode-heading">2. Choose playback mode</h2>
+<fieldset>
+<legend>Sonification mode</legend>
+<div class="radio-group" role="radiogroup">
+<label>
+<input type="radio" name="mode" value="chord" checked>
+<span>Chord (all frequencies at once, 6 s)</span>
+</label>
+<label>
+<input type="radio" name="mode" value="sweep">
+<span>Sweep (scan through spectrum, 10 s)</span>
+</label>
+</div>
+</fieldset>
+<p class="info-box">
+<strong>Chord:</strong> Plays a 1-second reference tone at 1420 MHz, then all spectrum frequencies together for 5 seconds. Stronger signals sound louder.<br>
+<strong>Sweep:</strong> Plays a reference tone, then scans through the spectrum over time. Pitch and volume rise at strong signals, so you can hear the spectral shape.
+</p>
+</section>
+
+<section aria-labelledby="controls-heading">
+<h2 id="controls-heading">3. Listen</h2>
+<div class="controls">
+<button id="playBtn" class="btn-play" disabled aria-describedby="play-help">Play</button>
+<button id="stopBtn" class="btn-stop" disabled>Stop</button>
+<button id="downloadBtn" class="btn-download" disabled>Download WAV</button>
+</div>
+<p class="sr-only" id="play-help">Generates and plays the sonified spectrum audio</p>
+<div class="progress-bar" id="progressBar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Processing progress">
+<div class="progress-bar-fill" id="progressFill"></div>
+</div>
+</section>
+
+<div id="status" role="status" aria-live="polite" aria-atomic="true"></div>
+
+</main>
+<footer>
+Built for accessible radio astronomy. Reference frequency: 1420.405751 MHz (21 cm hydrogen line).
+</footer>
+
+<script>
+(function() {
+'use strict';
+
+// --- State ---
+let parsedData = null;   // { freq: Float64Array, power: Float64Array }
+let audioBuffer = null;  // Float32Array of final audio samples
+let audioCtx = null;
+let sourceNode = null;
+let isPlaying = false;
+const SAMPLE_RATE = 44100;
+const REF_RF = 1420.405751; // MHz
+
+// --- DOM refs ---
+const csvFileInput = document.getElementById('csvFile');
+const freqColInput = document.getElementById('freqCol');
+const powerColInput = document.getElementById('powerCol');
+const playBtn = document.getElementById('playBtn');
+const stopBtn = document.getElementById('stopBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+const statusEl = document.getElementById('status');
+const progressBar = document.getElementById('progressBar');
+const progressFill = document.getElementById('progressFill');
+const dataSummary = document.getElementById('dataSummary');
+
+// --- Helpers ---
+function setStatus(msg, type) {
+  statusEl.textContent = msg;
+  statusEl.className = type || '';
+}
+
+function setProgress(pct) {
+  if (pct < 0) {
+    progressBar.classList.remove('active');
+    return;
+  }
+  progressBar.classList.add('active');
+  progressFill.style.width = pct + '%';
+  progressBar.setAttribute('aria-valuenow', Math.round(pct));
+}
+
+function median(arr) {
+  const sorted = Float64Array.from(arr).sort();
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function lerp(x, xs, ys) {
+  if (x <= xs[0]) return ys[0];
+  if (x >= xs[xs.length - 1]) return ys[ys.length - 1];
+  let lo = 0, hi = xs.length - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (xs[mid] <= x) lo = mid; else hi = mid;
+  }
+  const t = (x - xs[lo]) / (xs[hi] - xs[lo]);
+  return ys[lo] + t * (ys[hi] - ys[lo]);
+}
+
+function yieldUI() {
+  return new Promise(r => setTimeout(r, 0));
+}
+
+// --- CSV Parsing ---
+function parseCSV(text) {
+  const lines = text.split(/\r?\n/);
+  const freqIdx = parseInt(freqColInput.value, 10) - 1;
+  const powerIdx = parseInt(powerColInput.value, 10) - 1;
+  if (freqIdx < 0 || powerIdx < 0) throw new Error('Column numbers must be >= 1');
+
+  // Detect delimiter
+  let delim = ',';
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    if (trimmed.includes('\t') && !trimmed.includes(',')) { delim = '\t'; }
+    else if (trimmed.includes(';') && !trimmed.includes(',')) { delim = ';'; }
+    break;
+  }
+
+  const freq = [];
+  const power = [];
+  let skippedHeader = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const parts = trimmed.split(delim);
+    if (parts.length <= Math.max(freqIdx, powerIdx)) continue;
+    const f = parseFloat(parts[freqIdx]);
+    const p = parseFloat(parts[powerIdx]);
+    if (isNaN(f) || isNaN(p)) {
+      if (!skippedHeader) { skippedHeader = true; continue; }
+      continue;
+    }
+    freq.push(f);
+    power.push(p);
+  }
+
+  if (freq.length < 2) throw new Error('Need at least 2 valid data rows. Check your column settings.');
+  return { freq: new Float64Array(freq), power: new Float64Array(power) };
+}
+
+// --- Data Processing (matches Python notebook) ---
+function processData(raw) {
+  const freq = raw.freq;
+  const power = raw.power;
+  const n = freq.length;
+
+  // Baseline subtract + clip
+  const baseline = median(power);
+  const pClean = new Float64Array(n);
+  let pMax = 0;
+  for (let i = 0; i < n; i++) {
+    pClean[i] = Math.max(power[i] - baseline, 0);
+    if (pClean[i] > pMax) pMax = pClean[i];
+  }
+  if (pMax === 0) throw new Error('All power values are at or below the median baseline. No signal detected.');
+
+  const pNorm = new Float64Array(n);
+  for (let i = 0; i < n; i++) pNorm[i] = pClean[i] / pMax;
+
+  // Map to audio frequencies
+  const fMin = 200, fMax = 2000;
+  const freqMin = freq[0] < freq[n - 1] ? freq[0] : freq[n - 1];
+  const freqMax = freq[0] > freq[n - 1] ? freq[0] : freq[n - 1];
+  const freqRange = freqMax - freqMin || 1;
+
+  const fNorm = new Float64Array(n);
+  const audioFreq = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    fNorm[i] = (freq[i] - freqMin) / freqRange;
+    audioFreq[i] = fMin + fNorm[i] * (fMax - fMin);
+  }
+
+  // Reference frequency in audio domain
+  const refNorm = (REF_RF - freqMin) / freqRange;
+  const refAudioFreq = fMin + refNorm * (fMax - fMin);
+  const refInRange = refNorm >= 0 && refNorm <= 1;
+
+  return { pNorm, audioFreq, fNorm, refAudioFreq, refNorm, refInRange, freqMin, freqMax, n };
+}
+
+// --- Audio Generation: Chord Mode ---
+async function generateChord(proc) {
+  const durationRef = 1.0;
+  const durationData = 5.0;
+  const nRef = Math.floor(SAMPLE_RATE * durationRef);
+  const nData = Math.floor(SAMPLE_RATE * durationData);
+  const { audioFreq, pNorm, refAudioFreq, n } = proc;
+
+  // Reference tone
+  const refAudio = new Float32Array(nRef);
+  for (let i = 0; i < nRef; i++) {
+    const t = i / SAMPLE_RATE;
+    let env = 1;
+    if (t < 0.02) env = t / 0.02;
+    if (t > durationRef - 0.02) env = (durationRef - t) / 0.02;
+    refAudio[i] = env * Math.sin(2 * Math.PI * refAudioFreq * t);
+  }
+
+  // Filter to significant amplitudes
+  const active = [];
+  for (let j = 0; j < n; j++) {
+    if (pNorm[j] >= 0.005) active.push(j);
+  }
+
+  // Sum sine waves in chunks with UI yield
+  const dataAudio = new Float32Array(nData);
+  const chunkSize = 40;
+  for (let c = 0; c < active.length; c += chunkSize) {
+    const end = Math.min(c + chunkSize, active.length);
+    for (let jj = c; jj < end; jj++) {
+      const j = active[jj];
+      const amp = pNorm[j];
+      const phaseInc = 2 * Math.PI * audioFreq[j] / SAMPLE_RATE;
+      let phase = 0;
+      for (let i = 0; i < nData; i++) {
+        dataAudio[i] += amp * Math.sin(phase);
+        phase += phaseInc;
+      }
+    }
+    const pct = 10 + 80 * (Math.min(end, active.length) / active.length);
+    setProgress(pct);
+    setStatus('Generating chord audio... ' + Math.round(pct) + '% (' + Math.min(end, active.length) + '/' + active.length + ' frequencies)', 'info');
+    await yieldUI();
+  }
+
+  // Normalize reference (peak = 1)
+  let maxRef = 0;
+  for (let i = 0; i < nRef; i++) maxRef = Math.max(maxRef, Math.abs(refAudio[i]));
+  if (maxRef > 0) for (let i = 0; i < nRef; i++) refAudio[i] /= maxRef;
+
+  // Normalize data (matching Python: /= max(abs)/6 means peak = 6)
+  let maxData = 0;
+  for (let i = 0; i < nData; i++) maxData = Math.max(maxData, Math.abs(dataAudio[i]));
+  if (maxData > 0) for (let i = 0; i < nData; i++) dataAudio[i] /= (maxData / 6);
+
+  // Combine
+  const full = new Float32Array(nRef + nData);
+  full.set(refAudio);
+  full.set(dataAudio, nRef);
+
+  // Final normalize to [-0.95, 0.95] for web playback
+  let maxFull = 0;
+  for (let i = 0; i < full.length; i++) maxFull = Math.max(maxFull, Math.abs(full[i]));
+  if (maxFull > 0) for (let i = 0; i < full.length; i++) full[i] = (full[i] / maxFull) * 0.95;
+
+  return full;
+}
+
+// --- Audio Generation: Sweep Mode ---
+async function generateSweep(proc) {
+  const durationRef = 1.5;
+  const durationSweep = 8.0;
+  const silenceGap = 0.3;
+  const nRef = Math.floor(SAMPLE_RATE * durationRef);
+  const nGap = Math.floor(SAMPLE_RATE * silenceGap);
+  const nSweep = Math.floor(SAMPLE_RATE * durationSweep);
+  const { fNorm, pNorm, refAudioFreq, refNorm, n } = proc;
+
+  // Sort by normalized frequency for interpolation
+  const indices = Array.from({ length: n }, (_, i) => i);
+  indices.sort((a, b) => fNorm[a] - fNorm[b]);
+  const sortedFNorm = new Float64Array(indices.map(i => fNorm[i]));
+  const sortedPNorm = new Float64Array(indices.map(i => pNorm[i]));
+
+  // Reference tone with gentle envelope
+  const refAudio = new Float32Array(nRef);
+  const refFreq = 800;
+  for (let i = 0; i < nRef; i++) {
+    const t = i / SAMPLE_RATE;
+    let env = 1;
+    if (t < 0.05) env = t / 0.05;
+    if (t > durationRef - 0.05) env = (durationRef - t) / 0.05;
+    refAudio[i] = env * 0.8 * Math.sin(2 * Math.PI * refFreq * t);
+  }
+
+  setProgress(20);
+  setStatus('Generating sweep audio...', 'info');
+  await yieldUI();
+
+  // Sweep: time -> spectrum position, power -> pitch + volume
+  const sweepAudio = new Float32Array(nSweep);
+  const pitchLow = 220, pitchHigh = 1100;
+  let phase = 0;
+
+  for (let i = 0; i < nSweep; i++) {
+    const position = i / nSweep; // 0..1 through spectrum
+    const power = lerp(position, sortedFNorm, sortedPNorm);
+    const pitch = pitchLow + power * (pitchHigh - pitchLow);
+    const volume = 0.08 + power * 0.82;
+    phase += 2 * Math.PI * pitch / SAMPLE_RATE;
+    sweepAudio[i] = volume * Math.sin(phase);
+  }
+
+  setProgress(70);
+  await yieldUI();
+
+  // Add reference marker beep at hydrogen line position
+  if (refNorm >= 0 && refNorm <= 1) {
+    const markerTime = refNorm * durationSweep;
+    const markerHalf = 0.15; // seconds each side
+    const mStart = Math.max(0, Math.floor((markerTime - markerHalf) * SAMPLE_RATE));
+    const mEnd = Math.min(nSweep, Math.floor((markerTime + markerHalf) * SAMPLE_RATE));
+    let mPhase = 0;
+    for (let i = mStart; i < mEnd; i++) {
+      const localT = (i - mStart) / SAMPLE_RATE;
+      const mDur = (mEnd - mStart) / SAMPLE_RATE;
+      let env = 1;
+      if (localT < 0.02) env = localT / 0.02;
+      if (localT > mDur - 0.02) env = (mDur - localT) / 0.02;
+      mPhase += 2 * Math.PI * 1600 / SAMPLE_RATE;
+      sweepAudio[i] += env * 0.35 * Math.sin(mPhase);
+    }
+  }
+
+  // Normalize sweep
+  let maxSweep = 0;
+  for (let i = 0; i < nSweep; i++) maxSweep = Math.max(maxSweep, Math.abs(sweepAudio[i]));
+  if (maxSweep > 0) for (let i = 0; i < nSweep; i++) sweepAudio[i] = (sweepAudio[i] / maxSweep) * 0.9;
+
+  setProgress(90);
+  await yieldUI();
+
+  // Combine: ref + gap + sweep
+  const full = new Float32Array(nRef + nGap + nSweep);
+  full.set(refAudio);
+  // gap is zeros already
+  full.set(sweepAudio, nRef + nGap);
+
+  return full;
+}
+
+// --- WAV Encoding ---
+function encodeWAV(samples) {
+  const numSamples = samples.length;
+  const buffer = new ArrayBuffer(44 + numSamples * 2);
+  const view = new DataView(buffer);
+
+  function writeStr(offset, str) {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  }
+
+  writeStr(0, 'RIFF');
+  view.setUint32(4, 36 + numSamples * 2, true);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);           // PCM
+  view.setUint16(22, 1, true);           // mono
+  view.setUint32(24, SAMPLE_RATE, true);
+  view.setUint32(28, SAMPLE_RATE * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeStr(36, 'data');
+  view.setUint32(40, numSamples * 2, true);
+
+  for (let i = 0; i < numSamples; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(44 + i * 2, s < 0 ? s * 32768 : s * 32767, true);
+  }
+
+  return new Blob([buffer], { type: 'audio/wav' });
+}
+
+// --- Playback ---
+function playAudio(samples) {
+  stopAudio();
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
+  const buf = audioCtx.createBuffer(1, samples.length, SAMPLE_RATE);
+  buf.getChannelData(0).set(samples);
+  sourceNode = audioCtx.createBufferSource();
+  sourceNode.buffer = buf;
+  sourceNode.connect(audioCtx.destination);
+  sourceNode.onended = function() {
+    isPlaying = false;
+    stopBtn.disabled = true;
+    playBtn.disabled = false;
+    setStatus('Playback finished.', 'success');
+  };
+  sourceNode.start();
+  isPlaying = true;
+  stopBtn.disabled = false;
+  playBtn.disabled = true;
+}
+
+function stopAudio() {
+  if (sourceNode) {
+    try { sourceNode.stop(); } catch(e) {}
+    sourceNode = null;
+  }
+  if (audioCtx) {
+    audioCtx.close().catch(function(){});
+    audioCtx = null;
+  }
+  isPlaying = false;
+  stopBtn.disabled = true;
+}
+
+// --- Event Handlers ---
+csvFileInput.addEventListener('change', function() {
+  const file = csvFileInput.files[0];
+  if (!file) return;
+  setStatus('Reading file...', 'info');
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      parsedData = parseCSV(e.target.result);
+      const proc = processData(parsedData);
+
+      // Show summary
+      document.getElementById('sumRows').textContent = proc.n;
+      document.getElementById('sumFreqRange').textContent =
+        proc.freqMin.toFixed(3) + ' - ' + proc.freqMax.toFixed(3) + ' MHz';
+      document.getElementById('sumRefStatus').textContent =
+        proc.refInRange ? 'Within your data range' : 'OUTSIDE your data range (check frequency units)';
+      dataSummary.classList.add('visible');
+
+      playBtn.disabled = false;
+      downloadBtn.disabled = true;
+      audioBuffer = null;
+      setStatus('File loaded: ' + proc.n + ' data points. Ready to play.', 'success');
+    } catch(err) {
+      setStatus('Error: ' + err.message, 'error');
+      playBtn.disabled = true;
+    }
+  };
+  reader.onerror = function() { setStatus('Error reading file.', 'error'); };
+  reader.readAsText(file);
+});
+
+playBtn.addEventListener('click', async function() {
+  if (!parsedData) return;
+  playBtn.disabled = true;
+  downloadBtn.disabled = true;
+  stopAudio();
+
+  try {
+    const proc = processData(parsedData);
+    const mode = document.querySelector('input[name="mode"]:checked').value;
+    setProgress(5);
+    setStatus('Processing spectrum data...', 'info');
+    await yieldUI();
+
+    if (mode === 'chord') {
+      audioBuffer = await generateChord(proc);
+    } else {
+      audioBuffer = await generateSweep(proc);
+    }
+
+    setProgress(100);
+    setStatus('Playing audio...', 'success');
+    await yieldUI();
+
+    playAudio(audioBuffer);
+    downloadBtn.disabled = false;
+    setProgress(-1);
+  } catch(err) {
+    setStatus('Error: ' + err.message, 'error');
+    playBtn.disabled = false;
+    setProgress(-1);
+  }
+});
+
+stopBtn.addEventListener('click', function() {
+  stopAudio();
+  playBtn.disabled = false;
+  setStatus('Playback stopped.', 'info');
+});
+
+downloadBtn.addEventListener('click', function() {
+  if (!audioBuffer) return;
+  setStatus('Encoding WAV file...', 'info');
+  const blob = encodeWAV(audioBuffer);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const mode = document.querySelector('input[name="mode"]:checked').value;
+  a.download = 'hydrogen_line_' + mode + '.wav';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  setStatus('WAV downloaded: hydrogen_line_' + mode + '.wav', 'success');
+});
+
+})();
+</script>
+</body>
+</html>
