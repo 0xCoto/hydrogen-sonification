@@ -104,7 +104,7 @@ Default: column 1 for frequency (MHz), column 4 for power. Adjust if your CSV us
 </label>
 <label>
 <input type="radio" name="mode" value="sweep">
-<span>Sweep (scan through spectrum, 10 s)</span>
+<span>Sweep (scan through spectrum, 8 s)</span>
 </label>
 </div>
 </fieldset>
@@ -347,30 +347,15 @@ async function generateChord(proc) {
 
 // --- Audio Generation: Sweep Mode ---
 async function generateSweep(proc) {
-  const durationRef = 1.5;
   const durationSweep = 8.0;
-  const silenceGap = 0.3;
-  const nRef = Math.floor(SAMPLE_RATE * durationRef);
-  const nGap = Math.floor(SAMPLE_RATE * silenceGap);
   const nSweep = Math.floor(SAMPLE_RATE * durationSweep);
-  const { fNorm, pNorm, refAudioFreq, refNorm, n } = proc;
+  const { fNorm, pNorm, refNorm, n } = proc;
 
   // Sort by normalized frequency for interpolation
   const indices = Array.from({ length: n }, (_, i) => i);
   indices.sort((a, b) => fNorm[a] - fNorm[b]);
   const sortedFNorm = new Float64Array(indices.map(i => fNorm[i]));
   const sortedPNorm = new Float64Array(indices.map(i => pNorm[i]));
-
-  // Reference tone with gentle envelope
-  const refAudio = new Float32Array(nRef);
-  const refFreq = 800;
-  for (let i = 0; i < nRef; i++) {
-    const t = i / SAMPLE_RATE;
-    let env = 1;
-    if (t < 0.05) env = t / 0.05;
-    if (t > durationRef - 0.05) env = (durationRef - t) / 0.05;
-    refAudio[i] = env * 0.8 * Math.sin(2 * Math.PI * refFreq * t);
-  }
 
   setProgress(20);
   setStatus('Generating sweep audio...', 'info');
@@ -419,13 +404,7 @@ async function generateSweep(proc) {
   setProgress(90);
   await yieldUI();
 
-  // Combine: ref + gap + sweep
-  const full = new Float32Array(nRef + nGap + nSweep);
-  full.set(refAudio);
-  // gap is zeros already
-  full.set(sweepAudio, nRef + nGap);
-
-  return full;
+  return sweepAudio;
 }
 
 // --- WAV Encoding ---
